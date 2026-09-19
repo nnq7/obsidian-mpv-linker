@@ -1,0 +1,16 @@
+# 各人自己的插件设置（含本地视频目录、播放器路径），不要提交
+data.json
+
+# 作者的版本快照锚点，不属于插件源码
+backup/
+
+# 编辑器 / 系统杂项
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 日志与临时产物
+*.log
+*.tmp

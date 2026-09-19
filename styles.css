@@ -1,0 +1,52 @@
+/* 实时预览 & 阅读模式共用的链接样式 */
+.mpv-linker-link,
+.mpv-linker-time {
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.mpv-linker-link {
+    color: var(--link-color);
+    text-decoration: none;
+    padding: 0 2px;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+}
+
+/* 一个关键词挂多个时间点时，每个时间点是独立可点的小链接，给它自己的 hover 反馈 */
+.mpv-linker-time {
+    padding: 0 1px;
+}
+
+.mpv-linker-link:hover,
+.mpv-linker-time:hover {
+    color: var(--link-color-hover);
+    background-color: var(--background-modifier-hover);
+    text-decoration: underline;
+}
+
+.mpv-linker-link:active,
+.mpv-linker-time:active {
+    background-color: var(--background-modifier-active-hover);
+}
+
+/* 命中多个视频时的常驻提示：逐个列出视频名称，长标题要能折行、能选中复制 */
+.mpv-linker-notice-list {
+    margin-top: 6px;
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-smaller);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
+.mpv-linker-notice-list > div + div {
+    margin-top: 4px;
+}
+
+.mpv-linker-notice-tip {
+    margin-top: 6px;
+    font-size: var(--font-ui-smaller);
+    opacity: 0.7;
+}
