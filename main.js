@@ -130,6 +130,19 @@ const NO_IPC_MESSAGE = '插入需要 mpv.net 的远程接口，请把「复用�
 const LINK_EXISTS_MESSAGE = '无法插入，当前位置已存在视频链接！';
 
 /*
+ * 点的是**片名/括号**（而不是某个时间点）时，如果同名视频已经在播，就什么都不做。
+ * 用户 2026-09-19 明确要求：那种情况不该「跳到第一个时间点」、更不该「从头重播」，只提示。
+ * （点时间点仍然照常跳转 —— 那才是「我要看这一刻」的意思。）
+ */
+const ALREADY_PLAYING_MESSAGE = '已有同名视频正在播放！';
+
+/*
+ * 「删除链接或时间节点」必须**真的指到那条链接**才动手：光标只贴在链接两端
+ * （尤其是紧贴在 `}` 后面）不算「指到链接」。两种情况共用这一句 —— 用户 2026-09-19 要求统一。
+ */
+const DELETE_HINT_MESSAGE = '请在视频链接上右键选择删除！';
+
+/*
  * {@关键词} 里写不进这些字符：} 会提前收尾，& 和 | 是分隔符，换行更不用说。
  * 视频文件名恰好带上它们时，只能提示用户，不能硬插一条语法坏掉的链接。
  */
@@ -355,7 +368,8 @@ function parseExtraArgs(text) {
 /**
  * 生成可点击的链接元素，显示为 (🎞关键词-03:22|04:33)。
  * 多个时间点时，每个时间点是**独立**的可点元素，点哪个跳哪个；点时间以外的部分
- * （关键词、括号）落在整条链接上，跳到第一个时间，保留「整条链接可点」的手感。
+ * （关键词、括号）落在整条链接上 —— 这一下的意思是「**我要播这个视频**」，
+ * 所以 onPlay 会带上 `isKeywordClick = true`，插件据此在「同名视频已经在播」时拒绝重复播放。
  *
  * onContextMenu（可选）：只给实时预览用。菜单里的「插入时间节点」「删除链接或时间节点」都需要
  * 知道右键落在哪条链接、**落在它的哪一部分**上，而实时预览里链接被换成了本 widget ——
@@ -374,7 +388,8 @@ function buildLinkDom(keyword, times, onPlay, onContextMenu) {
     wrap.addEventListener('mousedown', (e) => e.preventDefault());
     wrap.addEventListener('click', (e) => {
         e.preventDefault();
-        onPlay(times[0] ?? ''); // 点时间以外的部分 → 从头（或第一个时间）开始
+        // 第二个参数 isKeywordClick = true：点的是片名/括号（整条链接），不是某个时间点
+        onPlay(times[0] ?? '', true);
     });
     if (onContextMenu) {
         wrap.addEventListener('contextmenu', (e) => {
@@ -396,7 +411,8 @@ function buildLinkDom(keyword, times, onPlay, onContextMenu) {
         el.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation(); // 别落到 wrap 的「播第一个」上
-            onPlay(t);
+            // isKeywordClick = false：明确点了某一个时间点 → 「我要看这一刻」，照常跳转
+            onPlay(t, false);
         });
         wrap.appendChild(el);
     });
@@ -433,7 +449,7 @@ class MpvLinkWidget extends WidgetType {
         return buildLinkDom(
             this.keyword,
             this.times,
-            (t) => this.plugin.playVideo(this.keyword, t),
+            (t, isKeywordClick) => this.plugin.playVideo(this.keyword, t, isKeywordClick),
             (timeIndex) => this.plugin.rememberLink(this.from, this.to, timeIndex)
         );
     }
@@ -1123,7 +1139,9 @@ class MpvLinkerPlugin extends Plugin {
             }
             const keyword = m[1];
             frag.appendChild(
-                buildLinkDom(keyword, splitTimes(m[2]), (t) => this.playVideo(keyword, t))
+                buildLinkDom(keyword, splitTimes(m[2]), (t, isKeywordClick) =>
+                    this.playVideo(keyword, t, isKeywordClick)
+                )
             );
             last = m.index + m[0].length;
         }
@@ -1134,9 +1152,13 @@ class MpvLinkerPlugin extends Plugin {
         node.parentNode.replaceChild(frag, node);
     }
 
-    /* -------------------------------------------------------- 播放 */
+    /* -------------------------------------------------------- 播放
+     *
+     * time 是链接里写的时间文本（'' = 没写）；isKeywordClick 为 true 表示这一下点的是
+     * **片名/括号**（整条链接），而不是某个时间点 —— 见 buildLinkDom 与 ALREADY_PLAYING_MESSAGE。
+     */
 
-    async playVideo(keyword, time) {
+    async playVideo(keyword, time, isKeywordClick = false) {
         const dir = this.settings.videoDirectory;
         const mpvPath = this.settings.mpvPath || 'mpvnet';
 
@@ -1163,10 +1185,46 @@ class MpvLinkerPlugin extends Plugin {
         const seconds = parseTimeToSeconds(time);
         const base = this.settings.mpvIpcBase; // loadSettings 已规整成 ≥ 0 的整数
 
+        /*
+         * 「重复播放拦截」（用户 2026-09-19 要求）：点的是**片名/括号**时，如果同名视频已经在播，
+         * 就什么都不做 —— 既不跳到第一个时间点、也不从头重播，只提示一句。
+         * 理由：点片名的意思是「我要看这个视频」，可它已经在放了，再动一下只会把进度弄乱。
+         *
+         * 判据沿用全插件同一套口径（关键词是**包含**关系，不是相等）：视频按 `YYMMDD-标题.mp4`
+         * 命名，链接里常只写命名的一段，所以用 includes 才对得上。
+         *
+         * ⚠️ 判据是**所有在播窗口**，不是「当前窗口」：用户 2026-09-19 报告 —— 先后打开两部
+         * 不同名的片子后，点**先打开**那部的片名会把它跳到第一个时间点，只有点后打开那部才会提示。
+         * 根因就是当时只问了「当前窗口」（= 最后启动的那个），名字对不上就漏判了。
+         * 窗口标题退路只在「一条受控窗口都没在播」时才问 —— 那是一次 PowerShell（约 0.9s），
+         * 不该每次点链接都付这个钱。
+         *
+         * 点在某个**时间点**上（isKeywordClick = false）时**不走这条路** —— 那是「我要看这一刻」，
+         * 该跳就跳（复用窗口 seek）。
+         */
+        if (isKeywordClick) {
+            const windows = await this.playingWindows();
+            let sameNamed = windows.some((p) => keywordOf(p.file).includes(keyword));
+            if (!sameNamed && !windows.length) {
+                const titled = await mpvWindowTitle(); // 双击打开的窗口只能靠标题认
+                sameNamed = !!(titled && titled.includes(keyword));
+            }
+            if (sameNamed) {
+                new Notice('MPV Linker：' + ALREADY_PLAYING_MESSAGE);
+                return;
+            }
+        }
+
         let free = '';
         if (base > 0) {
             const r = await this.reuseWindow(base, file, seconds, time);
-            if (r.reused) return;
+            if (r.reused) {
+                /* 层 2：**复用也算一次交互** —— 你刚点的是这个窗口，那它就是「当前窗口」。
+                   不这样做的话，点回旧窗口也换不回来，之后所有「需要知道在播什么」的动作
+                   （插入视频、空白处截图）会一直认错窗口。 */
+                this.currentPipe = r.pipe;
+                return;
+            }
             free = r.free;
         }
 
@@ -1174,6 +1232,9 @@ class MpvLinkerPlugin extends Plugin {
         const child = this.launchMpv(mpvPath, file, seconds, free);
         // 通道名记下来：再点同一视频时直接问这一条，不必整轮探
         this.lastLaunch = { file, at: Date.now(), pipe: free, child };
+        // 新起来的窗口就是「当前窗口」（层 2）。注意它与 lastLaunch 分工不同，别合并：
+        // lastLaunch 是「刚启动的那个」—— 复用窗口的重试等待要靠它；currentPipe 是「最近交互过的」。
+        this.currentPipe = free;
 
         /* 窗口一关掉就忘掉这次启动。否则再点同一视频时，会以为「mpv 正在启动、管道还没就绪」
            而白等一整个重试窗口 —— 实测那一下就是 1.5 秒，且每点一次都慢。
@@ -1198,6 +1259,9 @@ class MpvLinkerPlugin extends Plugin {
      *      等的对象都不在了，继续等只是让用户白等一秒多。
      *   2. 其余情况才整轮探通道 —— 窗口可能是用户自己开的，也可能是上一次 Obsidian
      *      会话留下的，通道名无从得知。
+     *
+     * 返回 `{ reused, pipe, free }`：`reused` 为真时 `pipe` 就是命中的那条通道 ——
+     * 调用方要用它把「当前窗口」切过去（层 2：**点一下链接也算一次交互**）。
      */
     async reuseWindow(base, file, seconds, time) {
         const target = path.basename(file);
@@ -1214,7 +1278,7 @@ class MpvLinkerPlugin extends Plugin {
                 if ((await probeSlot(launched.pipe)).now?.file === target) {
                     if (await mpvSeek(launched.pipe, seconds)) {
                         new Notice(`⏩ 已有窗口在播，跳到 ${time || '00:00'}`, PLAY_NOTICE_MS);
-                        return { reused: true, free: '' };
+                        return { reused: true, pipe: launched.pipe, free: '' };
                     }
                     break; // 通道在、命令没送达（mpv 正在退出等）→ 落到下面开新窗口
                 }
@@ -1227,9 +1291,9 @@ class MpvLinkerPlugin extends Plugin {
         const { match, free } = await scanMpv(base, target);
         if (match && (await mpvSeek(match, seconds))) {
             new Notice(`⏩ 已有窗口在播，跳到 ${time || '00:00'}`, PLAY_NOTICE_MS);
-            return { reused: true, free: '' };
+            return { reused: true, pipe: match, free: '' };
         }
-        return { reused: false, free };
+        return { reused: false, pipe: '', free };
     }
 
     /**
@@ -1265,24 +1329,27 @@ class MpvLinkerPlugin extends Plugin {
      * 返回子进程本身：调用方要拿它判断「这个窗口还在不在」。
      *
      * 参数顺序有讲究（与 VLC 版同一套约定）：用户的「附加启动参数」排在**前面**，
-     * 远程接口那两个永远在最后 —— 用户不该（也很难有意地）把自己窗口的 IPC 顶掉。
+     * 接口参数排在**最后** —— 用户不该（也很难有意地）把自己窗口的 IPC 顶掉。
      *
-     * ⚠️ `--process-instance=multi` 是**必须显式带上**的：mpv.net 手册里这一项的
-     * 默认值是 `single`（`single` = 强制单实例，第二个进程会把文件交给已存在的实例然后自己退出）。
-     * 本机用的 mpv.net-DW 在 mpvnet.conf 里把它改成了 multi 所以看不出问题，
-     * 但换台电脑就会退化成「第二个窗口根本开不出来」。
-     * 实测：带上它之后，多个实例各占自己的管道、互不干扰。
+     * ⚠️ `--process-instance=multi` 是**无条件、必须显式带上**的（2026-09 实测后加固）：
+     * mpv.net 手册里这一项的默认值是 `single`（强制单实例，第二个进程会把文件交给
+     * 已存在的实例然后自己退出）。本机用的 mpv.net-DW 在 mpvnet.conf 里把它改成了 multi
+     * 所以看不出问题，但**换台电脑（尤其装原生 mpv.net、没有 mpvnet.conf 的）就会退化**：
+     * 实测「已有实例在跑时，新进程 exit=0 @280ms，窗口根本开不出来」。
+     * 它**不能**只放在 `if (pipeName)` 里 —— 通道全忙时同样会中招。
      */
     launchMpv(mpvPath, videoPath, seconds, pipeName) {
         const args = [
             videoPath,
             `--start=${seconds}`,
             ...parseExtraArgs(this.settings.mpvExtraArgs),
+            // 无条件带上：见上面的说明，它与「有没有空闲通道」无关
+            '--process-instance=multi',
         ];
 
         // 带上 IPC 通道，下次点同一视频就能直接 seek 而不是再开一个窗口
         if (pipeName) {
-            args.push('--process-instance=multi', `--input-ipc-server=${pipePathOf(pipeName)}`);
+            args.push(`--input-ipc-server=${pipePathOf(pipeName)}`);
         }
 
         /*
@@ -1366,25 +1433,54 @@ class MpvLinkerPlugin extends Plugin {
     }
 
     /**
+     * 此刻**所有**在播的受控窗口（没开控制通道 / 没在播 → 空数组）。
+     * 8 条通道并行问，最坏耗时就是一个 ipcTimeout。
+     */
+    async playingWindows() {
+        const base = this.settings.mpvIpcBase;
+        if (base <= 0) return [];
+        return playingOn(await probeRange(base));
+    }
+
+    /**
+     * 「正在播这个关键词所指视频」的那个窗口（没有 → null）。**层 1 的核心。**
+     *
+     * 它**不问「当前窗口是谁」**，而是拿关键词去**所有在播窗口**里找。
+     * 理由：右键落在链接上时，链接本身已经说清用户指的是哪部片子 —— 再去猜「他现在看着哪个窗口」
+     * 只会猜错（用户 2026-09-19 报告：先后打开两部片子后，先打开的那部会失去截图 / 插入时间节点
+     * 的能力，根因就是旧实现只认「最后启动的那个窗口」）。
+     *
+     * 「同名」沿用全插件口径 —— 关键词是**包含**关系、不是相等。
+     * 多个窗口都命中时优先「最近交互过的那个」（currentPipe），保证结果稳定可预期。
+     */
+    async playingForKeyword(keyword) {
+        const hit = (await this.playingWindows()).filter((p) => keywordOf(p.file).includes(keyword));
+        if (!hit.length) return null;
+        return hit.find((p) => p.pipe === this.currentPipe) || hit[0];
+    }
+
+    /**
      * 当前正在播放的 mpv.net → { pipe, file, path, seconds }；读不到 → null。
      *
      * 两步：先问通道区间（能同时拿到文件名、完整路径与**播放进度**），一无所获时退一步看
      * 窗口标题（只有文件名，`seconds` 为 null —— 见 mpvWindowTitle 的说明）。
      * 第二步是必要的：从资源管理器双击打开的视频不在通道区间里，用户会以为「mpv 明明开着」。
      *
-     * 多个窗口同时在播时，优先取「本插件最近启动的那个」：IPC 不会告诉我们哪个窗口在前台，
-     * Windows 又没有免 P/Invoke 的前台窗口查询可用（本机 Add-Type 被安全策略禁掉）。
-     * 8 条通道并行问，最坏耗时就是一个 ipcTimeout。
+     * 多个窗口同时在播时，优先取「**最近交互过的**那个」（`currentPipe`：启动新窗口、或复用
+     * 已有窗口都会更新它 —— 层 2）。IPC 不会告诉我们哪个窗口在前台，Windows 又没有免 P/Invoke
+     * 的前台窗口查询（见 DEVELOPMENT 里那份分析），所以「最近交互过」是目前**最接近用户意图、
+     * 且完全靠现有能力**的判据。
+     *
+     * ⚠️ 凡是**从链接里就能知道是哪部片子**的动作，都不要用这个函数 —— 那是层 1 的事
+     * （`playingForKeyword`），别混。
      */
     async currentPlayback() {
         const base = this.settings.mpvIpcBase;
         if (base > 0) {
             const playing = playingOn(await probeRange(base));
             if (playing.length) {
-                // 优先「本插件最近启动的那个」窗口（lastLaunch 可能为空，那时取第一条）
-                const recent = playing.find(
-                    (p) => this.lastLaunch && p.pipe === this.lastLaunch.pipe
-                );
+                // 优先「最近交互过的那个」；它可能已经被关掉 → 自然落回编号最小的那条
+                const recent = playing.find((p) => this.currentPipe && p.pipe === this.currentPipe);
                 return recent || playing[0];
             }
         }
@@ -1431,7 +1527,7 @@ class MpvLinkerPlugin extends Plugin {
         //    （linkHint 只由 rememberLink 写入，它一定会带上 timeIndex）
         if (hint) {
             const at = links.find((l) => l.from === hint.from && l.to === hint.to);
-            if (at) return { link: at, timeIndex: hint.timeIndex };
+            if (at) return { link: at, timeIndex: hint.timeIndex, fromHint: true };
         }
 
         // 2. 其余情况看光标/选区碰到了谁（源码模式，以及实时预览里链接还没被替换时）
@@ -1444,7 +1540,23 @@ class MpvLinkerPlugin extends Plugin {
 
         // 右键会选中点到的那个词，所以落在哪个时间点上是可以算出来的
         const ranges = timeRangesAt(link.from, link.keyword, link.times);
-        return { link, timeIndex: timeIndexAt(ranges, sel) };
+        return { link, timeIndex: timeIndexAt(ranges, sel), fromHint: false };
+    }
+
+    /**
+     * 光标/选区是否**落在链接内部**（两侧边界都不算）—— 「我正指着这条链接」这个问题的判据。
+     *
+     * 与渲染层那个闭区间 `touches` 是两回事，别合并：`touches` 决定要不要把 `{@...}` 显示成原文，
+     * 用户明确要求**贴着边界也保留原文**（方便接着改）；而这里问的是「有没有指到链接」，
+     * 光标停在 `}` 后面时用户多半是想接着往下写。
+     * 判据用开区间：`link.from < sel.to && sel.from < link.to` —— 端点两侧各自退开一格都算「不在」。
+     */
+    cursorInsideLink(editor, link) {
+        const sel = {
+            from: editor.posToOffset(editor.getCursor('from')),
+            to: editor.posToOffset(editor.getCursor('to')),
+        };
+        return link.from < sel.to && sel.from < link.to;
     }
 
     /** 右键位置对应的那条链接（没有 → null）。插入时间节点只关心是哪条，不关心点在哪一部分 */
@@ -1498,7 +1610,16 @@ class MpvLinkerPlugin extends Plugin {
      *   · 否则 → 在光标处新插一条 {@视频名称&时间}
      */
     async insertTimeNode(editor, hint) {
-        const playing = await this.playingOrNotify();
+        const link = this.resolveLink(editor, hint);
+
+        /*
+         * 层 1：右键落在链接上时，**按这条链接的片子去找它的窗口**（playingForKeyword），
+         * 不要问「当前窗口是谁」。否则在看后开的那部时，没法给先开的那部补时间点 ——
+         * 要么报「名称不匹配」，要么把进度补错了对象（用户 2026-09-19 报告的就是前一种）。
+         * 那部片子没在播（找不到窗口）→ 落回原来的「当前窗口」逻辑，名称不匹配的提示原样保留。
+         */
+        let playing = link ? await this.playingForKeyword(link.keyword) : null;
+        if (!playing) playing = await this.playingOrNotify();
         if (!playing) return;
 
         // 退路（窗口标题）只给得出文件名，给不出进度 —— 不编一个 0 秒去骗用户
@@ -1508,10 +1629,10 @@ class MpvLinkerPlugin extends Plugin {
 
         const name = keywordOf(playing.file);
         const time = formatTime(playing.seconds);
-        const link = this.resolveLink(editor, hint);
 
         if (link) {
             // 关键词要对得上在播的视频才肯追加：否则用户以为在给「这条」补时间，其实补错了对象
+            // （只有上面落回「当前窗口」的那条路才可能走到这里）
             if (!name.includes(link.keyword)) {
                 return new Notice('MPV Linker：该链接与mpv.net正在播放的视频名称不匹配！');
             }
@@ -1547,8 +1668,14 @@ class MpvLinkerPlugin extends Plugin {
 
     /**
      * 删除链接或时间节点：
-     *   · 右键落在关键词/括号上 → 整条 {@...} 删掉
-     *   · 右键落在某个时间点上 → 只删那一个（删到最后一个时顺手去掉 `&`，回到 {@关键词}）
+     *   · 指到关键词/括号上 → 整条 {@...} 删掉
+     *   · 指到某个时间点上 → 只删那一个（删到最后一个时顺手去掉 `&`，回到 {@关键词}）
+     *
+     * **必须真的指到那条链接才动手**（用户 2026-09-19 要求）：
+     *   · 右键点是点在**渲染出来的链接**上（hint 命中）→ 算指到；
+     *   · 否则看光标/选区 —— 只有落在链接**内部**才算，**贴在两端（尤其紧贴在 `}` 后面）不算**。
+     *     紧贴 `}` 时用户多半是想接着往下写，而不是要删掉上一条链接；空白处同理。
+     *   这两种情况都**什么都不做**，只提示 `DELETE_HINT_MESSAGE`（用户要求文案统一）。
      *
      * **不读播放器**：删除纯粹是文档操作，mpv.net 开不开都该能用 —— 所以它不走
      * playingOrNotify()，「未获取到mpv.net视频」那句提示对删除是无意义的。
@@ -1556,8 +1683,13 @@ class MpvLinkerPlugin extends Plugin {
      * 只删链接本身，不动紧邻的空格（多留一个空格是可见的、但可预料；悄悄吃掉用户打的空格更糟）。
      */
     deleteLinkOrTime(editor, hint) {
+        /** 没指到链接 → 什么都不做，只说清该怎么操作 */
+        const miss = () => new Notice('MPV Linker：' + DELETE_HINT_MESSAGE);
+
         const target = this.resolveTarget(editor, hint);
-        if (!target) return new Notice('MPV Linker：这里没有 {@…} 链接可删');
+        if (!target) return miss();
+        // hint 那条路已经在 resolveTarget 里按文档校验过区间，命中即「确实点在链接上」
+        if (!target.fromHint && !this.cursorInsideLink(editor, target.link)) return miss();
 
         const { link, timeIndex } = target;
         const text = timeIndex >= 0 ? linkTextWithoutTime(link, timeIndex) : ''; // -1 = 整条删掉
@@ -1731,19 +1863,17 @@ class MpvLinkerPlugin extends Plugin {
      * 「与这个关键词同名的、此刻正在播的视频」——没有 → null。
      *
      * 「同名」的判据沿用链接匹配那套（关键词是**包含**关系，不相等）：用户的视频按
-     * `YYMMDD-标题.mp4` 命名，链接里写的是其中一段，所以 `keyword.includes(keyword)` 才对得上。
+     * `YYMMDD-标题.mp4` 命名，链接里写的是其中一段，所以用 includes 才对得上。
      *
-     * 只认**带 IPC 通道**的窗口（`pipe` 非空 且读得到秒数）：退路（窗口标题）给不出进度，
+     * **层 1**：拿关键词去**所有在播窗口**里找（`playingForKeyword`），而不是问「当前窗口是谁」——
+     * 否则在看后开的那部片子时，给先开的那部片子截图会得到 null（或截错片子）。
+     *
+     * 只认**能出图**的窗口（读得到秒数、且拿得到完整路径）：退路（窗口标题）给不出进度，
      * 截不了「此刻」那一帧，那种情况按「没有同名在播视频」处理，走原来的提示。
      */
     async matchingPlaying(keyword) {
-        const playing = await this.currentPlayback();
-        if (!playing || !playing.pipe || playing.seconds === null) return null;
-
-        const name = keywordOf(playing.file);
-        if (!name.includes(keyword)) return null;
-        if (!playing.path) return null;
-
+        const playing = await this.playingForKeyword(keyword);
+        if (!playing || playing.seconds === null || !playing.path) return null;
         return { file: playing.file, seconds: playing.seconds, path: playing.path };
     }
 
@@ -1852,6 +1982,13 @@ class MpvLinkerPlugin extends Plugin {
     async runImageOutput(mpvPath, videoPath, seconds, dir, width) {
         const args = [
             videoPath,
+            /* ⚠️ 必须无条件带上（2026-09-19 在原生 mpv.net 上暴雷后加固的）：
+               mpv.net 的 `process-instance` 默认是 `single` —— 只要这台机器上还有**别的 mpv.net
+               在跑**（比如用户正在看的那个窗口），本进程就会把文件「交接」过去、自己立刻退出：
+               实测 exit=0 @280ms、一张图都不写；更糟的是**用户正在看的窗口会被换成这里的视频**。
+               mpv.net-DW 的 mpvnet.conf 里写着 multi，所以在这台机器上一直看不出问题 ——
+               换到原生 mpv.net（没有 mpvnet.conf）就必然踩。命令行能压过配置，实测有效。 */
+            '--process-instance=multi',
             `--vo-image-outdir=${dir}`, // ⚠️ 必须排在 --vo=image 之前
             '--vo=image',
             `--vo-image-format=${SNAP_FORMAT}`,
@@ -2304,6 +2441,8 @@ module.exports.__internals = {
     WINDOW_NOT_CAPTURED_MESSAGE,
     NO_IPC_MESSAGE,
     LINK_EXISTS_MESSAGE,
+    ALREADY_PLAYING_MESSAGE,
+    DELETE_HINT_MESSAGE,
     FILM_ICON,
     CLOCK_ICON,
     SCISSORS_ICON,

@@ -1,7 +1,7 @@
 {
   "id": "mpv-linker",
   "name": "MPV Linker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.5.7",
   "description": "把笔记里的关键词链接交给本地 mpv.net 播放器：点一下就能播放对应视频并跳到指定时间点，同一个视频已在播时直接跳转、不重开窗口，还能把某一刻的画面截成图片插进笔记。",
   "author": "hyc",
