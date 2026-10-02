@@ -50,3 +50,19 @@
     font-size: var(--font-ui-smaller);
     opacity: 0.7;
 }
+
+/* 设置面板底部的「高级选项」折叠块：默认收起（<details> 不带 open 属性）。
+   summary 做成接近小标题的手感 —— 看得出能展开，又不抢上面那些设置项的注意力。 */
+.mpv-linker-advanced > summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 12px 0 4px;
+    font-size: var(--font-ui-medium);
+    font-weight: var(--font-semibold);
+    color: var(--text-muted);
+}
+
+.mpv-linker-advanced > summary:hover,
+.mpv-linker-advanced[open] > summary {
+    color: var(--text-normal);
+}

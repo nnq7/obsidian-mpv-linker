@@ -14,3 +14,7 @@ Desktop.ini
 # 日志与临时产物
 *.log
 *.tmp
+
+# release 专用的去注释 main.js（由 _github/build-dist.cjs 生成，不进仓库）
+# ⚠️ 仓库里必须是**原版** main.js；release 附件才用 dist/ 里这份
+dist/
