@@ -15,6 +15,7 @@ Desktop.ini
 *.log
 *.tmp
 
-# release 专用的去注释 main.js（由 _github/build-dist.cjs 生成，不进仓库）
-# ⚠️ 仓库里必须是**原版** main.js；release 附件才用 dist/ 里这份
+# 去注释 main.js 的构建产物（由 _github/build-dist.cjs 生成，不进仓库）
+# ⚠️ 2026-10-26 口径：仓库 main.js 与 release 附件**都是去注释版、逐字节相同**，
+#    构建后要把 dist/main.js 覆盖到仓库根目录的 main.js
 dist/

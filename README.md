@@ -1,228 +1,231 @@
 # MPV Linker
 
-**在笔记里点一下，就能让本地视频从你指定的那一刻开始播放。**
+**Click a link in your notes and the video starts at exactly that second.**
 
-> An Obsidian plugin that plays a local video in [mpv.net](https://github.com/mpvnet-player/mpv.net)
-> at a given timestamp, from a link written in your notes. (Windows)
+> An Obsidian plugin that opens a local video in [mpv.net](https://github.com/mpvnet-player/mpv.net)
+> at a timestamp written in your note. Windows only.
 
----
-
-## 这个插件能帮你做什么
-
-假如你有一堆视频存在硬盘里，看的时候经常想在笔记上记一笔：
-「这里讲了什么，第 7 分 23 秒」。
-
-有了这个插件，你只要在笔记里写一行字：
-
-```
-{@视频文件名&07:23}
-```
-
-它就会在笔记里变成一个**可以点的小链接**。点一下，视频直接从 **07:23** 那一秒开始播。
-不用再自己去拖进度条，也不用一边看一边抄时间。
-
-它还能做三件事：
-
-1. **同一节课反复看不同的位置，不会开一堆窗口** —— 视频已经在播了，就只是在原来的窗口里跳过去。
-2. **把画面截成图片插进笔记** —— 在想要的那一帧上右键，图就直接进笔记了，而且**不会打断你正在看的视频**。
-3. **不用手打时间** —— 右键选「插入时间节点」，它会把「现在播到第几秒」自动写进笔记。
-
-## 效果长什么样
-
-你在笔记里写的是这样（源码模式）：
-
-```
-{@视频文件名&07:23|12:28}
-```
-
-在笔记里看到的是这样（预览 / 阅读模式）：
-
-```
-(🎞视频文件名-07:23|12:28)
-```
-
-`07:23` 和 `12:28` 是**两个独立的小链接**，点哪个跳哪个；点前面的片名就从开头播。
+**English** · [中文](#中文说明)
 
 ---
 
-## 开始之前，你需要准备三样东西
+## Quick start
 
-| 需要什么 | 说明 |
+1. Install **mpv.net** and note the full path to `mpvnet.exe`
+2. Put `main.js`, `manifest.json` and `styles.css` into `.obsidian/plugins/mpv-linker/`
+3. In Obsidian: Settings → Community plugins → enable **MPV Linker**
+4. Fill in **Video folder** and **mpv.net path**
+5. Write `{@260414&07:23}` in a note and click it
+
+Details below.
+
+---
+
+## Installation
+
+### 1. Install the player
+
+mpv.net is a free Windows player. Pick either build — **it makes no difference to this plugin**:
+
+- Official: https://github.com/mpvnet-player/mpv.net
+- DW build: https://github.com/diana7127/mpv.net-DW (prettier UI, thumbnails, localized menus; the one the author uses)
+
+Open the page → **Releases** → download the latest installer → install.
+
+**Note the full path to `mpvnet.exe`**, e.g. `D:\Tools\mpv.net\mpvnet.exe`.
+If you ticked "add to PATH" during installation you can simply enter `mpvnet`; if unsure, use the full path.
+
+### 2. Install the plugin
+
+1. Open your vault folder and go to `.obsidian\plugins\`
+   (can't see `.obsidian`? It's hidden — enable "Hidden items" in Explorer)
+2. Create a folder named **exactly** `mpv-linker`
+3. Put `main.js`, `manifest.json` and `styles.css` inside it
+4. Open Obsidian → Settings → Community plugins → click **Reload** → enable **MPV Linker**
+
+### 3. Configure
+
+Click the gear next to "MPV Linker" under Community plugins.
+
+**Required:**
+
+| Setting | What to enter | Example |
+| --- | --- | --- |
+| **Video folder** | Folder containing your videos (absolute path). Subfolders are searched too | `F:\video` |
+| **mpv.net path** | The path from step 1; or `mpvnet` if it's on PATH | `D:\Tools\mpv.net\mpvnet.exe` |
+
+**Screenshots (skip if you don't need them):**
+
+| Setting | What to enter | Default |
+| --- | --- | --- |
+| Downscale when above 2K (2560x1440) | Shrinks large videos before saving a frame. Small videos are never upscaled | Off |
+| Screenshot quality | 20–100, higher is sharper and larger; the button on the right restores the default | 90 |
+| Screenshot folder | Empty = Obsidian's attachment folder; or any folder inside the vault (with autocomplete) | Empty |
+
+**Video extensions**: which files count as videos, comma separated. Usually leave it as is.
+
+There is also a collapsed **Advanced** section: extra player arguments (e.g. `--ontop` to keep the window on top) and the window-reuse pipe base (`0` disables reuse).
+
+---
+
+## Usage
+
+### Write a link
+
+Type one of these in a note; switch to preview to see a clickable link:
+
+| You write | What happens |
 | --- | --- |
-| **Windows 电脑** | 这个插件依赖 mpv.net，而 mpv.net 只有 Windows 版 |
-| **Obsidian 桌面版** | 版本 1.5.7 或更新（手机版用不了） |
-| **mpv.net 播放器** | 免费，见下面第一步 |
+| `{@260414}` | Plays the video whose filename **contains** `260414`, from the start |
+| `{@260414&07:23}` | Starts at 07:23 |
+| `{@260414&07:23\|12:28}` | Two independent links, each jumps to its own time |
 
-## 第一步：安装 mpv.net 播放器
+- **Time** accepts `mm:ss` (`07:23`) and `h:mm:ss` (`1:02:03`).
+- **Matching is "contains"**: for `260414-title.mp4`, `260414` — or any fragment of the name — is enough.
+- **Several matches**: the plugin never guesses. A notice lists the matched files; make the keyword more specific and click again.
+- **Clicking the title** (no timestamp) means "open this video". If it is already playing in a window the plugin opened, you only get a notice — your progress is untouched.
+- **While the cursor touches a link**, the raw `{@...}` text is shown so you can edit it.
 
-mpv.net 是一个免费开源的播放器，是 mpv 的 Windows 图形界面版。
+### Right-click menu
 
-**下载地址（任选其一）：**
+In the **editor view**, right-click a note → **MPV Linker**:
 
-- **mpv.net 官方版**：https://github.com/mpvnet-player/mpv.net
-- **mpv.net-DW 版**：https://github.com/diana7127/mpv.net-DW
+| Item | What it does |
+| --- | --- |
+| **Insert video** | Reads the playing video's name and writes `{@name}` |
+| **Insert timestamp** | Reads the current position and writes `{@name&time}`; on an existing link it appends to that link |
+| **Delete link or timestamp** | Deletes the whole link, or only the timestamp you clicked |
+| **Insert screenshot** | Captures the current frame and inserts it into the note |
+| **Show in file explorer** | Opens the video's folder and selects the file |
 
-> 两个版本都行。官方版界面朴素；**DW 版**是国人做的美化版，自带好看的播放界面、缩略图预览、
+**Smoothest way to use "Insert timestamp"**: click a link to start playback, pause where you want to take a note, come back and right-click → Insert timestamp.
 
-点开上面的网址 → 找到页面右侧的 **Releases**（发行版）→ 下载最新的安装包 → 装好即可。
+### Insert a screenshot
 
-装完之后，请记下 `mpvnet.exe` 在哪里，例如：
+| You right-click on | Result |
+| --- | --- |
+| **A timestamp** (e.g. `07:23`) | Captures that exact frame — **the video does not need to be playing**; the image goes on the **line below that link** |
+| **A title / bracket**, and the same video is playing | Captures the current frame, on the **line below that link** |
+| **Empty space in the note** | Captures the frame from the most recent player window, inserted **at the cursor** |
+| **A title / bracket**, but that video isn't playing | The note is left untouched; you get a notice asking you to use a timestamp |
 
-```
-D:\Tools\MPV.net_DW\mpv.net-DW v2.1.0\mpvnet.exe
-```
+> Taking a screenshot **does not interrupt the video you're watching**, but a window **flashes briefly** (see Limitations).
 
-**等一下就会用到这个路径。**
+---
 
-> 小提示：如果你安装时选了「添加到 PATH」，那么以后插件里只写 `mpvnet` 四个字母就够了，
-> 不必写完整路径。不确定的话就直接写完整路径，最稳。
+## FAQ
 
-## 第二步：安装这个插件
+**"No video found containing …"**
+Check the **Video folder**, whether the file is inside it (subfolders included), and that its extension is listed under **Video extensions**.
 
-Obsidian 的插件都是放在仓库里的一个文件夹，所以安装就是**复制文件**。
+**"mpv.net executable not found"**
+The **mpv.net path** is wrong. Use the full path to `mpvnet.exe`, including `.exe`.
 
-**1. 找到你仓库的插件文件夹**
+**The player is running but the plugin can't read playback progress**
+Only windows opened **through a note link** are readable. A window opened by double-clicking in Explorer has no connection to the plugin. Click the matching link in a note first, then use the right-click menu.
 
-打开你的 Obsidian 仓库目录，依次进入：
+**Videos opened by double-click sometimes resume, sometimes restart**
+That is mpv.net's own rule, not the plugin: videos **longer than 5 minutes** remember the position, **5 minutes or shorter** do not.
 
-```
-.obsidian\plugins\
-```
+**What if the timestamp is beyond the video's length?**
+No window is opened; you get a notice. Exactly equal to the length is not "beyond". If the length can't be read for an unusual format, the plugin plays as before.
 
-**2. 新建一个文件夹，名字必须是 `mpv-linker`**
+---
 
-```
-.obsidian\plugins\mpv-linker\
-```
+## Limitations
 
-> ⚠️ 文件夹名字**必须**是这个，不能改成别的。
+- **Windows desktop only** (mpv.net has no other platform build; mobile Obsidian won't work)
+- **A window flashes when taking a screenshot** — mpv.net has no true background mode
+- **Windows opened by double-clicking expose no progress**, so "Insert timestamp" and "screenshot from empty space" don't work on them; use note links instead
+- The right-click menu exists only in the **editor view**, not in reading mode
 
-**3. 把这三个文件复制进去**
+## License
 
-从本仓库下载（点开文件 → 右上角 Raw / 下载按钮）：
+[MIT](LICENSE) — do whatever you want, just keep the copyright notice.
 
-- `main.js`
-- `manifest.json`
-- `styles.css`
+## Author
 
-**4. 再打开 Obsidian，去启用它**
+nnq7
 
-打开 Obsidian → 左下角齿轮（设置）→ 左侧找到 **「第三方插件」** →
-点一下 **「刷新」**（重新载入插件列表）→ 在下面找到 **MPV Linker** → 打开右边的开关。
+---
 
-## 第三步：填设置
+## 中文说明
 
-启用后，在「第三方插件 → MPV Linker」右边点齿轮，会看到设置页。**至少要填前两项**：
+**在笔记里点一下，视频就从你写的那一刻开始播。**
+
+### 快速开始
+
+1. 装 **mpv.net**，记住 `mpvnet.exe` 的完整路径
+2. 把 `main.js`、`manifest.json`、`styles.css` 放进 `.obsidian/plugins/mpv-linker/`
+3. 打开 Obsidian → 设置 → 第三方插件 → 启用 **MPV Linker**
+4. 设置里填「视频文件目录」和「mpv.net 播放器路径」
+5. 笔记里写 `{@260414&07:23}`，点它
+
+### 安装
+
+**1. 装播放器**：mpv.net 是免费的 Windows 播放器，两个版本功能上没有区别——官方版
+https://github.com/mpvnet-player/mpv.net ，或 DW 版 https://github.com/diana7127/mpv.net-DW
+（美化版，自带缩略图与汉化界面，本插件作者在用）。打开页面 → 右侧 **Releases** → 下载安装。
+
+装完记下 `mpvnet.exe` 的完整路径，例如 `D:\Tools\mpv.net\mpvnet.exe`。安装时勾了「添加到 PATH」的话，
+后面设置里只写 `mpvnet` 就够了；不确定就写完整路径。
+
+**2. 装插件**：进入仓库目录下的 `.obsidian\plugins\`（看不到就勾上「隐藏的项目」）→ 新建文件夹
+**必须叫** `mpv-linker` → 把 `main.js`、`manifest.json`、`styles.css` 放进去 →
+打开 Obsidian → 设置 → 第三方插件 → 点「刷新」→ 找到 **MPV Linker** → 打开开关。
+
+**3. 填设置**（必填两项）：
 
 | 设置项 | 填什么 | 例子 |
 | --- | --- | --- |
-| **视频文件目录** | 你的视频放在哪个文件夹（会把这个文件夹**连同所有子文件夹**都搜一遍） | `F:\video` |
-| **mpv.net 播放器路径** | 第一步记下的 `mpvnet.exe` 完整路径；加了 PATH 的话写 `mpvnet` 也行 | `D:\Tools\...\mpvnet.exe` |
-| 视频扩展名 | 一般不用改。逗号分隔 | `.mp4,.mkv,.avi` |
-| mpv.net 附加启动参数 | 一般不用填 | 想让窗口一直浮在最上层就填 `--ontop` |
-| 复用窗口通道 | 一般不用改。**填 0 会关掉「复用窗口」功能**（每次都开新窗口） | `18730` |
-| 截图分辨率≥3K时缩放操作 | 只有 3K 以上的超清片才起作用，普通片子忽略 | 不操作 |
-| 截图保存目录位置 | 留空 = 存到 Obsidian 默认的附件位置 | 留空 |
+| **视频文件目录** | 视频放在哪个文件夹，填绝对路径；子文件夹会自动一起搜索 | `F:\video` |
+| **mpv.net 播放器路径** | 上面记下的路径；已加入 PATH 的可以只写 `mpvnet` | `D:\Tools\mpv.net\mpvnet.exe` |
 
----
+截图相关（不截图可以不管）：**截图分辨率＞2K时缩放操作**（大视频先缩小，小视频绝不放大，默认不操作）、
+**截图质量**（20~100，默认 90，右侧按钮一键恢复）、**截图保存目录位置**（留空 = Obsidian 的附件目录）。
 
-## 怎么用
+**视频扩展名**一般不用改。底部还有个默认收起的「高级选项」：附加启动参数（如 `--ontop` 让窗口总在最前）、
+复用窗口通道（填 `0` 可关掉「已在播就直接跳」）。
 
-### 一、写链接
+### 用法
 
-在**编辑视图**或**源码模式**里写 `{@...}`，然后切到预览 / 阅读模式就能看到小链接：
+**写链接**：
 
-| 你写的 | 作用 |
+| 你写的 | 效果 |
 | --- | --- |
-| `{@260414}` | 播放指定目录下文件名里**包含** `260414` 的视频，从头开始 |
+| `{@260414}` | 播放文件名**包含** `260414` 的视频，从头开始 |
 | `{@260414&07:23}` | 直接从 07:23 开始播 |
 | `{@260414&07:23\|12:28}` | 两个时间点是两个独立链接，点哪个跳哪个 |
 
-> 时间格式支持 `分:秒`（`07:23`）和 `时:分:秒`（`1:02:03`）。
+时间支持 `分:秒` 和 `时:分:秒`。关键词是「包含」匹配，写片名里任意一小段都行。命中多个会列出来让你写精确。
+点片名（不带时间）=「把这部片子打开」，若它已在插件打开的窗口里播着，只提示一句、不打断你。
+光标停在链接里或紧贴两端时，会显示回 `{@...}` 原文，方便修改。
 
-**关于「包含」**：视频一般叫 `260414-标题.mp4`，你写 `{@260414}`、或者写
-片名里的任意一小段，都能找到它，不必写全名。
-
-**如果不小心匹配到多个视频**，插件**不会乱猜**：它会弹出一条提示，把命中的文件名
-一个个列出来，你把关键词写得更精确一点，再点一次就行。
-
-### 二、右键菜单（最省事的方式）
-
-在**编辑视图**里对着笔记右键 → **MPV Linker** → 五个选项：
+**右键菜单**（编辑视图里对着笔记右键 → MPV Linker）：
 
 | 菜单项 | 作用 |
 | --- | --- |
-| **插入视频** | 读「现在正在播的视频名」，自动写成 `{@视频名}` |
+| **插入视频** | 读「正在播的视频名」，自动写成 `{@视频名}` |
 | **插入时间节点** | 读「现在播到第几秒」，自动写成 `{@视频名&时间}`；对着已有链接右键则追加进那条链接 |
-| **删除链接或时间节点** | 整条删掉，或只删你右键点中的那一个时间点 |
+| **删除链接或时间节点** | 整条删掉，或只删你点中的那个时间点 |
 | **插入截图** | 把某一刻的画面截成图片，插进笔记 |
-| **在系统资源管理器中显示** | 打开视频所在的文件夹并选中它 |
+| **在系统资源管理器中显示** | 打开视频所在文件夹并选中它 |
 
-**「插入时间节点」怎么用最顺**：先点链接让视频播起来，看到想记的地方，
-回到笔记右键 →「插入时间节点」，时间就自动写好了。
+**插入截图**：右键时间节点 → 截**那一刻**（不需要视频在播），图插在这条链接的**下一行**；
+右键片名且同名视频在播 → 当前帧插在**下一行**；右键空白处 → 截最近那个窗口的当前帧，插在**光标处**。
+截图**不会打断你正在看的视频**，但会**闪一下窗口**。
 
-### 三、插入截图
+### 常见问题
 
-| 你右键点在 | 会发生什么 |
-| --- | --- |
-| **某个时间节点**（如 `07:23`）上 | 截**那一刻**的图，**不需要视频正在播** |
-| **片名 / 括号**上，并且同名视频正在播 | 在当前行下面**空一行**，把「此刻」这一帧插进去 |
-| **笔记空白处** | 截「最近那个播放窗口此刻在播的那一帧」 |
-| **片名 / 括号**上，但没有同名视频在播 | 不动笔记，提示你「请在时间节点上操作！」 |
+- **提示「未找到文件名包含××的视频」**：检查「视频文件目录」、视频是否在该目录（含子目录）、扩展名是否在列表里。
+- **提示「找不到 mpv.net 可执行文件」**：播放器路径不对，填 `mpvnet.exe` 完整路径，别漏 `.exe`。
+- **播放器开着却读不到进度**：只有**通过笔记链接打开**的窗口才读得到；从文件夹双击打开的不算。先在笔记里点一下链接。
+- **双击打开的视频，关掉再开有时接着播、有时从头**：这是 mpv.net 自己的规则——**超过 5 分钟**记进度，**5 分钟以内**不记。
+- **时间点超过片长**：不会打开窗口，只会提示；正好等于片长不算超。
 
-> 截图会**另开一个播放器进程**来干活，所以**不会影响你正在看的那个窗口**。
-> 代价是截图时会**闪过一个窗口**（见下方「已知限制」）。
+### 已知限制
 
----
-
-## 常见问题
-
-**Q：点了链接没反应，或者提示「未找到文件名包含××的视频」？**
-
-先检查设置里的「视频文件目录」填对没有。它要是填错了，或者视频不在这目录（含子目录）里，
-就会找不到。另外视频的扩展名要在「视频扩展名」那一项里（默认已经包含常见的几种）。
-
-**Q：提示「找不到 mpv.net 可执行文件」？**
-
-「mpv.net 播放器路径」填得不对。请填 `mpvnet.exe` 的**完整路径**，注意别漏了 `.exe`。
-
-**Q：我明明开着播放器，为什么右键「插入时间节点」说读不到？**
-
-**只有通过笔记链接打开的视频窗口，插件才读得到播放进度。**
-
-如果你是在**文件夹里双击**打开的，那个窗口跟插件之间没有联系，插件拿不到「现在播到第几秒」。
-**解决办法**：在笔记里点一下对应的链接（插件会打开或复用自己的窗口），再用右键菜单就行。
-
-**Q：双击打开的视频，为什么有时关掉再打开会接着播，有时从头开始？**
-
-这**不是插件的行为，是 mpv.net 自己的机制**，而且取决于视频长短：
-
-- **超过 5 分钟**的视频：默认会记住进度，下次打开接着播。
-- **5 分钟以内**的视频：默认**不记**（认为短片重看一遍更省事），所以每次从头开始。
-
-如果你装的是 **mpv.net-DW**，这条规则写在它 `portable_config` 文件夹下的 `profiles.conf` 里，
-条目名叫 `save-props-auto`。想让短片也记住进度，就把那行条件里的 `p.duration<=300` 删掉，
-或者整条 `[save-props-auto]` 删掉。
-
-**Q：截图的时候为什么会弹出一个窗口？**
-
-mpv.net 官方说明它的主窗口永远是显示的，没有「完全后台运行」的模式，
-所以截图时没法像某些播放器那样彻底不出现窗口。插件已经把它最小化了，但任务栏可能一闪。
-
-**Q：提示「命中 N 个视频」怎么办？**
-
-说明你写的关键词太短、匹配到好几个视频。把关键词写长一点、更精确一点就好。
-
----
-
-## 已知限制
-
-- **只支持 Windows**：mpv.net 本身只有 Windows 版。
-- **从文件夹双击打开的视频，插件读不到它的播放进度**（原因见上面的常见问题），
-  所以「插入时间节点」和「空白处插入截图」对那种窗口无效。**用笔记链接打开就一切正常。**
-- 右键菜单只在**编辑视图**里有，阅读模式没有。
-
-
-## 作者
-
-hyc
+- **只支持 Windows 桌面版**（mpv.net 没有其他平台版本，手机版 Obsidian 也用不了）
+- **截图时会闪一下窗口**——mpv.net 没有完全后台运行的模式
+- **从文件夹双击打开的窗口读不到播放进度**，所以「插入时间节点」「空白处插入截图」对它无效
+- 右键菜单只在**编辑视图**里有，阅读模式没有
